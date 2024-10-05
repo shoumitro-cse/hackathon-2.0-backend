@@ -7,7 +7,8 @@ from contents.models import Content, Author, Tag, ContentTag
 from contents.serializers import ContentSerializer, ContentDataPostSerializer, ContentDataSerializer
 from django.core.paginator import Paginator
 from django.utils.timezone import now
-from django.db.models import Q, Sum, Count
+from django.db.models.functions import Coalesce
+from django.db.models import Q, Sum, Count, F, Case, When, FloatField
 
 
 class ContentAPIView(APIView):
@@ -71,7 +72,7 @@ class ContentAPIView(APIView):
 
         # offset calculation
         offset = (page - 1) * items_per_page
-        queryset = Content.objects.filter(filters).select_related("author").distinct().order_by("id")[offset:offset + items_per_page]
+        queryset = Content.objects.filter(filters).select_related("author").distinct().order_by("-id")[offset:offset + items_per_page]
 
         # Pagination
         paginator = Paginator(queryset, items_per_page)
@@ -82,6 +83,7 @@ class ContentAPIView(APIView):
 
         return Response({
             'results': serialized.data,
+            # 'total_pages': paginator.num_pages,
             'total_pages': Content.objects.filter(filters).count(),
             'current_page': page,
         }, status=status.HTTP_200_OK)
@@ -133,46 +135,44 @@ class ContentStatsAPIView(APIView):
 
     def get(self, request):
         query_params = request.query_params
-        author_id = query_params.get('author_id', None)
-        author_username = query_params.get('author_username', None)
-        tag_id = query_params.get('tag_id', None)
-        title = query_params.get('title', None)
-        timeframe = query_params.get('timeframe', None)
-
         filters = Q()
 
-        if author_id:
-            filters &= Q(author_id=author_id)
-        if author_username:
-            filters &= Q(author__username__iexact=author_username)
-        if tag_id:
-            filters &= Q(contenttag__tag_id=tag_id)
-        if title:
-            filters &= Q(title__icontains=title)
+        filter_mappings = {
+            'author_id': 'author_id',
+            'author_username': 'author__username__iexact',
+            'tag_id': 'contenttag__tag_id',
+            'title': 'title__icontains'
+        }
+
+        # Apply filters dynamically
+        for param, db_field in filter_mappings.items():
+            value = query_params.get(param, None)
+            if value:
+                filters &= Q(**{db_field: value})
+
+        # Timeframe filter
+        timeframe = query_params.get('timeframe', None)
         if timeframe:
             days_ago = now() - timedelta(days=int(timeframe))
             filters &= Q(timestamp__gte=days_ago)
 
-        # Optimized query
+        # query with engagement, engagement rate calculation
         queryset = Content.objects.filter(filters).aggregate(
-            total_likes=Sum("like_count"),
-            total_comments=Sum("comment_count"),
-            total_shares=Sum("share_count"),
-            total_views=Sum("view_count"),
-            total_contents=Count("id", distinct=True)
+            total_likes=Coalesce(Sum('like_count'), 0),
+            total_comments=Coalesce(Sum('comment_count'), 0),
+            total_shares=Coalesce(Sum('share_count'), 0),
+            total_views=Coalesce(Sum('view_count'), 0),
+            total_contents=Count('id', distinct=True),
+            total_engagement=Coalesce(Sum(F('like_count') + F('comment_count') + F('share_count')), 0),
+            total_engagement_rate=Case(
+                When(total_views=0, then=0),
+                default=F('total_engagement') / F('total_views'),
+                output_field=FloatField()
+            )
         )
 
-        data = {
-            "total_likes": queryset["total_likes"] or 0,
-            "total_comments": queryset["total_comments"] or 0,
-            "total_shares": queryset["total_shares"] or 0,
-            "total_views": queryset["total_views"] or 0,
-            "total_contents": queryset["total_contents"]
-        }
-        data["total_engagement"] = data["total_likes"] + data["total_comments"] + data["total_shares"]
-        data["total_engagement_rate"] = data["total_engagement"] / data["total_views"] if data["total_views"] > 0 else 0
+        return Response(queryset, status=status.HTTP_200_OK)
 
-        return Response(data, status=status.HTTP_200_OK)
 
 
 
