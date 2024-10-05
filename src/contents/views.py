@@ -1,9 +1,10 @@
+from django.db import transaction
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from datetime import timedelta
 from contents.models import Content, Author, Tag, ContentTag
-from contents.serializers import ContentSerializer, ContentPostSerializer, ContentDataSerializer
+from contents.serializers import ContentSerializer, ContentDataPostSerializer, ContentDataSerializer
 from django.core.paginator import Paginator
 from django.utils.timezone import now
 from django.db.models import Q, Sum, Count
@@ -52,38 +53,12 @@ class ContentAPIView(APIView):
             'current_page': page,
         }, status=status.HTTP_200_OK)
 
+    @transaction.atomic
     def post(self, request):
-        serializer = ContentPostSerializer(data=request.data, many=True)
+        serializer = ContentDataPostSerializer(data=request.data, many=True)
         serializer.is_valid(raise_exception=True)
-
-        for content_data in serializer.validated_data:
-            author_data = content_data.get("author")
-            author, _ = Author.objects.get_or_create(
-                unique_id=author_data["unique_external_id"],
-                defaults={
-                    "username": author_data["unique_name"],
-                    "name": author_data["full_name"],
-                    "url": author_data["url"],
-                    "title": author_data["title"],
-                }
-            )
-
-            content, created = Content.objects.update_or_create(
-                unique_id=content_data["unq_external_id"],
-                defaults={
-                    "author": author,
-                    "title": content_data["title"],
-                    "like_count": content_data["stats"]["likes"],
-                    "comment_count": content_data["stats"]["comments"],
-                    "share_count": content_data["stats"]["shares"],
-                    "view_count": content_data["stats"]["views"],
-                }
-            )
-
-            for tag_name in content_data.get("hashtags", []):
-                tag, _ = Tag.objects.get_or_create(name=tag_name)
-                ContentTag.objects.get_or_create(content=content, tag=tag)
-
+        # Using bulk creation with validated data for optimization
+        serializer.save()
         return Response({"detail": "Content updated successfully"}, status=status.HTTP_200_OK)
 
 

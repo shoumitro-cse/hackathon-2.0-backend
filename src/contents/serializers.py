@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from contents.models import Content, Author
+from contents.models import Content, Author, Tag, ContentTag
 
 
 # For Reading the data from the DB
@@ -23,6 +23,45 @@ class ContentDataSerializer(ContentBaseSerializer):
         data["engagement_rate"] = data["total_engagement"] / instance.view_count if instance.view_count > 0 else 0
         data["author"] = AuthorSerializer(instance.author).data
         return data
+
+
+class ContentDataPostSerializer(serializers.ModelSerializer):
+    author = AuthorSerializer()
+
+    class Meta:
+        model = Content
+        fields = '__all__'
+
+    def create(self, validated_data):
+        author_data = validated_data.pop("author")
+        author, _ = Author.objects.get_or_create(
+            unique_id=author_data["unique_external_id"],
+            defaults={
+                "username": author_data["unique_name"],
+                "name": author_data["full_name"],
+                "url": author_data["url"],
+                "title": author_data["title"],
+            }
+        )
+
+        content, created = Content.objects.update_or_create(
+            unique_id=validated_data["unq_external_id"],
+            defaults={
+                "author": author,
+                "title": validated_data["title"],
+                "like_count": validated_data["stats"]["likes"],
+                "comment_count": validated_data["stats"]["comments"],
+                "share_count": validated_data["stats"]["shares"],
+                "view_count": validated_data["stats"]["views"],
+            }
+        )
+
+        # Handle hashtags
+        for tag_name in validated_data.get("hashtags", []):
+            tag, _ = Tag.objects.get_or_create(name=tag_name)
+            ContentTag.objects.get_or_create(content=content, tag=tag)
+
+        return content
 
 
 class ContentSerializer(serializers.Serializer):
