@@ -154,7 +154,7 @@ class MegaEcommerce(models.Model):
 
 # for MegaEcommerce all models
 
-class User(models.Model):
+class User(models.Model):  # please note: we can use here django user model
     user_id = models.AutoField(primary_key=True)
     username = models.CharField(max_length=100, unique=True)
     email = models.EmailField(unique=True)
