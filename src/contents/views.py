@@ -6,7 +6,7 @@ from contents.models import Content, Author, Tag, ContentTag
 from contents.serializers import ContentSerializer, ContentPostSerializer, ContentDataSerializer
 from django.core.paginator import Paginator
 from django.utils.timezone import now
-from django.db.models import Q, Sum
+from django.db.models import Q, Sum, Count
 
 
 class ContentAPIView(APIView):
@@ -111,14 +111,21 @@ class ContentStatsAPIView(APIView):
             days_ago = now() - timedelta(days=int(timeframe))
             filters &= Q(timestamp__gte=days_ago)
 
-        queryset = Content.objects.filter(filters).distinct()
+        # Optimized query
+        queryset = Content.objects.filter(filters).aggregate(
+            total_likes=Sum("like_count"),
+            total_comments=Sum("comment_count"),
+            total_shares=Sum("share_count"),
+            total_views=Sum("view_count"),
+            total_contents=Count("id", distinct=True)
+        )
 
         data = {
-            "total_likes": queryset.aggregate(total_likes=Sum("like_count"))["total_likes"] or 0,
-            "total_comments": queryset.aggregate(total_comments=Sum("comment_count"))["total_comments"] or 0,
-            "total_shares": queryset.aggregate(total_shares=Sum("share_count"))["total_shares"] or 0,
-            "total_views": queryset.aggregate(total_views=Sum("view_count"))["total_views"] or 0,
-            "total_contents": queryset.count(),
+            "total_likes": queryset["total_likes"] or 0,
+            "total_comments": queryset["total_comments"] or 0,
+            "total_shares": queryset["total_shares"] or 0,
+            "total_views": queryset["total_views"] or 0,
+            "total_contents": queryset["total_contents"]
         }
         data["total_engagement"] = data["total_likes"] + data["total_comments"] + data["total_shares"]
         data["total_engagement_rate"] = data["total_engagement"] / data["total_views"] if data["total_views"] > 0 else 0
