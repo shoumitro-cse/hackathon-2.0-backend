@@ -71,7 +71,7 @@ class ContentAPIView(APIView):
 
         # offset calculation
         offset = (page - 1) * items_per_page
-        queryset = Content.objects.filter(filters).select_related("author").distinct().order_by("-id")[offset:offset + items_per_page]
+        queryset = Content.objects.filter(filters).select_related("author").distinct().order_by("id")[offset:offset + items_per_page]
 
         # Pagination
         paginator = Paginator(queryset, items_per_page)
@@ -82,7 +82,7 @@ class ContentAPIView(APIView):
 
         return Response({
             'results': serialized.data,
-            'total_pages': paginator.num_pages,
+            'total_pages': Content.objects.filter(filters).count(),
             'current_page': page,
         }, status=status.HTTP_200_OK)
 
