@@ -72,13 +72,15 @@ class ContentAPIView(APIView):
 
         # offset calculation
         offset = (page - 1) * items_per_page
-        queryset = Content.objects.filter(filters).select_related("author").distinct().order_by("-id")[offset:offset + items_per_page]
+        queryset = Content.objects.filter(filters).select_related("author").distinct().order_by("id")[offset:offset + items_per_page]
 
         # Pagination
-        paginator = Paginator(queryset, items_per_page)
-        paged_queryset = paginator.get_page(page)
+        # paginator = Paginator(queryset, items_per_page)
+        # paged_queryset = paginator.get_page(page)
 
-        serialized = ContentDataSerializer(paged_queryset, many=True)
+        # serialized = ContentDataSerializer(paged_queryset, many=True)
+        serialized = ContentDataSerializer(queryset, many=True)
+
         # print(serialized.data)
 
         return Response({
