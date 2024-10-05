@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from datetime import timedelta
 from contents.models import Content, Author, Tag, ContentTag
-from contents.serializers import ContentSerializer, ContentPostSerializer
+from contents.serializers import ContentSerializer, ContentPostSerializer, ContentDataSerializer
 from django.core.paginator import Paginator
 from django.utils.timezone import now
 from django.db.models import Q, Sum
@@ -35,27 +35,16 @@ class ContentAPIView(APIView):
             days_ago = now() - timedelta(days=int(timeframe))
             filters &= Q(timestamp__gte=days_ago)
 
-        queryset = Content.objects.filter(filters).distinct().order_by("-id")
+        # offset calculation
+        offset = (page - 1) * items_per_page
+        queryset = Content.objects.filter(filters).select_related("author").distinct().order_by("-id")[offset:offset + items_per_page]
 
-        # Pagination logic
+        # Pagination
         paginator = Paginator(queryset, items_per_page)
         paged_queryset = paginator.get_page(page)
 
-        serialized = ContentSerializer(paged_queryset, many=True)
-        for serialized_data in serialized.data:
-            like_count = serialized_data.get("like_count", 0)
-            comment_count = serialized_data.get("comment_count", 0)
-            share_count = serialized_data.get("share_count", 0)
-            view_count = serialized_data.get("view_count", 0)
-
-            total_engagement = like_count + comment_count + share_count
-            engagement_rate = total_engagement / view_count if view_count > 0 else 0
-
-            serialized_data["total_engagement"] = total_engagement
-            serialized_data["engagement_rate"] = engagement_rate
-
-            tags = list(ContentTag.objects.filter(content_id=serialized_data["id"]).values_list("tag__name", flat=True))
-            serialized_data["tags"] = tags
+        serialized = ContentDataSerializer(paged_queryset, many=True)
+        # print(serialized.data)
 
         return Response({
             'results': serialized.data,

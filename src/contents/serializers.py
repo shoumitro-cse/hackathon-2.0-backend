@@ -16,6 +16,15 @@ class ContentBaseSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class ContentDataSerializer(ContentBaseSerializer):
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["total_engagement"] = instance.like_count + instance.comment_count + instance.share_count
+        data["engagement_rate"] = data["total_engagement"] / instance.view_count if instance.view_count > 0 else 0
+        data["author"] = AuthorSerializer(instance.author).data
+        return data
+
+
 class ContentSerializer(serializers.Serializer):
     author = AuthorSerializer(read_only=True)
     content = ContentBaseSerializer(read_only=True)

@@ -19,12 +19,6 @@ class Content(models.Model):
     """
     TODO: When the data is being created or updated we don't know, need to add that information
     """
-    """
-    `likes`    : Content -> like_count
-    `comments` : Content -> comment_count
-    `views`    : Content -> view_count
-    `shares`   : Content -> share_count
-    """
     author = models.ForeignKey(Author, on_delete=models.CASCADE)
     unique_id = models.CharField(max_length=1024, )
     url = models.CharField(max_length=1024, blank=True, )
@@ -42,9 +36,8 @@ class Content(models.Model):
 class Tag(models.Model):
     """
     TODO: The tag is being duplicated sometimes, need to do something in the database.
-    Filtering
     """
-    name = models.CharField(max_length=100, unique=True)
+    name = models.CharField(max_length=100, unique=True)  # prevent duplicate value
     description = models.TextField(blank=True, null=True)
 
 
@@ -56,7 +49,7 @@ class ContentTag(models.Model):
     tag = models.ForeignKey(Tag, on_delete=models.CASCADE)
 
     class Meta:
-        unique_together = (('content', 'tag'),)
+        unique_together = (('content', 'tag'),)  # prevent duplicate value
 
 
 class MegaEcommerce(models.Model):
